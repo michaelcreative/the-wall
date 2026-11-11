@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f4">
+  <title>The Wall</title>
+  <meta name="description" content="A shared wall for notes and photos. Enter the PIN to open it. No account needed.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2326251e'/%3E%3Crect x='8' y='10' width='16' height='12' rx='2' fill='none' stroke='%23edecec' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <main id="main">
+    <section id="pin-screen" class="screen" aria-labelledby="pin-title">
+      <div class="pin-card">
+        <h1 id="pin-title">The Wall</h1>
+        <p class="lede">Enter the PIN to open the wall. No account needed.</p>
+        <form id="pin-form" novalidate>
+          <label for="pin-input">PIN</label>
+          <input
+            id="pin-input"
+            name="pin"
+            type="password"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            minlength="6"
+            pattern="[0-9]{6}"
+            placeholder="••••••"
+            required
+            autofocus
+          >
+          <p id="pin-error" class="error" role="alert" hidden></p>
+          <button type="submit" class="btn">Enter</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="wall-screen" class="screen" hidden aria-labelledby="wall-title">
+      <header class="wall-header">
+        <div>
+          <h1 id="wall-title">The Wall</h1>
+          <p class="lede">Leave a note. You can add a photo.</p>
+        </div>
+      </header>
+
+      <p id="sync-banner" class="banner" hidden role="status"></p>
+
+      <form id="composer" class="composer" aria-label="Write a note">
+        <label for="author">Name <span class="optional">(optional)</span></label>
+        <input id="author" name="author" type="text" maxlength="40" autocomplete="nickname" placeholder="Your name">
+
+        <label for="body">Note</label>
+        <textarea id="body" name="body" rows="4" maxlength="2000" required placeholder="Write something"></textarea>
+
+        <div class="composer-row">
+          <div class="file-field">
+            <label for="photo" class="btn btn-secondary">Add photo</label>
+            <input id="photo" name="photo" type="file" accept="image/*">
+            <span id="photo-name" class="file-name"></span>
+          </div>
+          <button type="submit" class="btn" id="post-btn">Post</button>
+        </div>
+        <p id="composer-error" class="error" role="alert" hidden></p>
+        <div id="photo-preview-wrap" class="photo-preview" hidden>
+          <img id="photo-preview" alt="Selected photo preview">
+          <button type="button" class="btn btn-ghost" id="photo-clear">Remove photo</button>
+        </div>
+      </form>
+
+      <div id="feed-status" class="feed-status" role="status"></div>
+      <ol id="feed" class="feed" aria-live="polite"></ol>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
