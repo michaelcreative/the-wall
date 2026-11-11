@@ -23,10 +23,21 @@
   const feed = document.getElementById("feed");
   const feedStatus = document.getElementById("feed-status");
   const syncBanner = document.getElementById("sync-banner");
+  const feedToolbar = document.getElementById("feed-toolbar");
+  const selectAll = document.getElementById("select-all");
+  const selectCount = document.getElementById("select-count");
+  const deleteSelectedBtn = document.getElementById("delete-selected");
+  const deleteDialog = document.getElementById("delete-dialog");
+  const deleteDialogCopy = document.getElementById("delete-dialog-copy");
+  const deleteCancel = document.getElementById("delete-cancel");
+  const deleteConfirm = document.getElementById("delete-confirm");
 
   let selectedImage = "";
   let supabaseClient = null;
   let knownIds = new Set();
+  let selectedIds = new Set();
+  let latestPosts = [];
+  let deleteInProgress = false;
 
   function config() {
     const raw = window.WALL_CONFIG || {};
@@ -110,13 +121,65 @@
     localStorage.setItem(LOCAL_KEY, JSON.stringify(posts));
   }
 
+  function isPostId(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      String(value || "")
+    );
+  }
+
+  function postSize(post) {
+    const parts = [post.author || "", post.body || "", post.image_data || ""];
+    return parts.reduce((sum, part) => sum + part.length, 0);
+  }
+
+  function formatSize(chars) {
+    if (chars < 1024) return chars + " B";
+    if (chars < 1024 * 1024) return (chars / 1024).toFixed(1) + " KB";
+    return (chars / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function selectedPosts() {
+    return latestPosts.filter((post) => selectedIds.has(post.id));
+  }
+
+  function updateToolbar() {
+    const total = latestPosts.length;
+    feedToolbar.hidden = total === 0;
+    if (total === 0) {
+      selectedIds.clear();
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      selectCount.textContent = "";
+      deleteSelectedBtn.disabled = true;
+      return;
+    }
+
+    const picked = selectedPosts();
+    const count = picked.length;
+    selectAll.checked = count === total;
+    selectAll.indeterminate = count > 0 && count < total;
+    deleteSelectedBtn.disabled = count === 0 || deleteInProgress;
+
+    if (count === 0) {
+      selectCount.textContent = "";
+      return;
+    }
+    const size = picked.reduce((sum, post) => sum + postSize(post), 0);
+    selectCount.textContent = count + " selected · about " + formatSize(size);
+  }
+
   function renderPosts(posts) {
+    latestPosts = posts.slice();
+    const valid = new Set(posts.map((p) => p.id));
+    selectedIds = new Set([...selectedIds].filter((id) => valid.has(id)));
     feed.replaceChildren();
     if (!posts.length) {
       const empty = document.createElement("p");
       empty.className = "feed-empty";
       empty.textContent = "No notes yet. Be the first to post.";
       feed.append(empty);
+      knownIds = new Set();
+      updateToolbar();
       return;
     }
 
@@ -127,6 +190,22 @@
         const item = document.createElement("li");
         item.className = "post";
         item.dataset.id = post.id;
+
+        const selectLabel = document.createElement("label");
+        selectLabel.className = "post-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selectedIds.has(post.id);
+        checkbox.dataset.id = post.id;
+        const hidden = document.createElement("span");
+        hidden.className = "visually-hidden";
+        hidden.textContent = post.author
+          ? "Select note by " + post.author
+          : "Select this note";
+        selectLabel.append(checkbox, hidden);
+
+        const content = document.createElement("div");
+        content.className = "post-content";
 
         const meta = document.createElement("div");
         meta.className = "post-meta";
@@ -140,27 +219,29 @@
         time.textContent = formatTime(post.created_at);
 
         meta.append(author, time);
-        item.append(meta);
+        content.append(meta);
 
         if (post.body) {
           const body = document.createElement("p");
           body.className = "post-body";
           body.textContent = post.body;
-          item.append(body);
+          content.append(body);
         }
 
         if (post.image_data && /^data:image\//.test(post.image_data)) {
           const image = document.createElement("img");
           image.src = post.image_data;
           image.alt = post.body ? "Photo for this note" : "Posted photo";
-          item.append(image);
+          content.append(image);
         }
 
+        item.append(selectLabel, content);
         return item;
       });
 
     feed.append(...listItems);
     knownIds = new Set(posts.map((p) => p.id));
+    updateToolbar();
   }
 
   async function loadImageElement(file) {
@@ -269,14 +350,86 @@
     return post;
   }
 
+  async function deletePosts(ids) {
+    const cleanIds = ids.filter(isPostId);
+    if (!cleanIds.length) return;
+    if (hasBackend()) {
+      const client = await ensureSupabase();
+      const { error } = await client.from("posts").delete().in("id", cleanIds);
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const remaining = loadLocalPosts().filter((post) => !cleanIds.includes(post.id));
+    saveLocalPosts(remaining);
+  }
+
+  function closeDeleteDialog() {
+    if (deleteDialog.open) deleteDialog.close();
+  }
+
+  function openDeleteDialog() {
+    const picked = selectedPosts();
+    if (!picked.length) return;
+    const count = picked.length;
+    const size = picked.reduce((sum, post) => sum + postSize(post), 0);
+    const noteWord = count === 1 ? "note" : "notes";
+    const scope = hasBackend()
+      ? "They will be removed for everyone who has the PIN."
+      : "They are only stored in this browser.";
+    deleteDialogCopy.textContent =
+      "Remove " +
+      count +
+      " " +
+      noteWord +
+      "? This cannot be undone. This frees about " +
+      formatSize(size) +
+      ". " +
+      scope;
+    if (typeof deleteDialog.showModal === "function") {
+      deleteDialog.showModal();
+    } else if (window.confirm(deleteDialogCopy.textContent)) {
+      removeSelectedPosts();
+    }
+  }
+
+  async function removeSelectedPosts() {
+    const ids = selectedPosts().map((post) => post.id).filter(isPostId);
+    if (!ids.length) {
+      closeDeleteDialog();
+      return;
+    }
+    deleteInProgress = true;
+    deleteConfirm.disabled = true;
+    deleteSelectedBtn.disabled = true;
+    const count = ids.length;
+    try {
+      await deletePosts(ids);
+      selectedIds.clear();
+      closeDeleteDialog();
+      const noteWord = count === 1 ? "note" : "notes";
+      await refreshFeed("Removed " + count + " " + noteWord + ".");
+    } catch (err) {
+      closeDeleteDialog();
+      feedStatus.textContent = "Could not remove notes. " + err.message;
+    } finally {
+      deleteInProgress = false;
+      deleteConfirm.disabled = false;
+      updateToolbar();
+    }
+  }
+
   async function refreshFeed(statusMessage) {
     try {
       if (statusMessage) feedStatus.textContent = statusMessage;
       const posts = await fetchPosts();
       renderPosts(posts);
-      feedStatus.textContent = hasBackend()
-        ? "Shared with everyone who has the PIN."
-        : "";
+      if (statusMessage) {
+        feedStatus.textContent = statusMessage;
+      } else {
+        feedStatus.textContent = hasBackend()
+          ? "Shared with everyone who has the PIN."
+          : "";
+      }
     } catch (err) {
       feedStatus.textContent = "Could not load notes. " + err.message;
     }
@@ -361,6 +514,47 @@
     }
   });
 
+  feed.addEventListener("change", (event) => {
+    const checkbox = event.target;
+    if (!(checkbox instanceof HTMLInputElement) || checkbox.type !== "checkbox") {
+      return;
+    }
+    const id = checkbox.dataset.id;
+    if (!isPostId(id)) return;
+    if (checkbox.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+    updateToolbar();
+  });
+
+  selectAll.addEventListener("change", () => {
+    if (selectAll.checked) {
+      latestPosts.forEach((post) => selectedIds.add(post.id));
+    } else {
+      selectedIds.clear();
+    }
+    feed.querySelectorAll('.post-select input[type="checkbox"]').forEach((box) => {
+      box.checked = selectAll.checked;
+    });
+    updateToolbar();
+  });
+
+  deleteSelectedBtn.addEventListener("click", () => {
+    openDeleteDialog();
+  });
+
+  deleteCancel.addEventListener("click", () => {
+    closeDeleteDialog();
+  });
+
+  deleteConfirm.addEventListener("click", () => {
+    removeSelectedPosts();
+  });
+
+  deleteDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeDeleteDialog();
+  });
+
   function updateBanner() {
     if (hasBackend()) {
       syncBanner.hidden = true;
@@ -383,10 +577,17 @@
 
     if (hasBackend()) {
       setInterval(() => {
-        if (!wallScreen.hidden) refreshFeed();
+        if (!wallScreen.hidden && !deleteInProgress && !deleteDialog.open) {
+          refreshFeed();
+        }
       }, 20000);
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible" && !wallScreen.hidden) {
+        if (
+          document.visibilityState === "visible" &&
+          !wallScreen.hidden &&
+          !deleteInProgress &&
+          !deleteDialog.open
+        ) {
           refreshFeed();
         }
       });

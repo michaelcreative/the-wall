@@ -36,3 +36,10 @@ create policy "Anyone can insert posts"
     and (image_data is null or char_length(image_data) <= 700000)
     and (char_length(trim(body)) > 0 or image_data is not null)
   );
+
+drop policy if exists "Anyone can delete posts" on public.posts;
+create policy "Anyone can delete posts"
+  on public.posts
+  for delete
+  to anon, authenticated
+  using (true);

@@ -42,7 +42,7 @@
       <header class="wall-header">
         <div>
           <h1 id="wall-title">The Wall</h1>
-          <p class="lede">Leave a note. You can add a photo.</p>
+          <p class="lede">Leave a note. You can add a photo. Select notes to remove them.</p>
         </div>
       </header>
 
@@ -71,9 +71,26 @@
       </form>
 
       <div id="feed-status" class="feed-status" role="status"></div>
+      <div id="feed-toolbar" class="feed-toolbar" hidden>
+        <label class="select-all" for="select-all">
+          <input id="select-all" type="checkbox">
+          Select all
+        </label>
+        <span id="select-count" class="select-count"></span>
+        <button type="button" class="btn btn-danger" id="delete-selected" disabled>Remove selected</button>
+      </div>
       <ol id="feed" class="feed" aria-live="polite"></ol>
     </section>
   </main>
+
+  <dialog id="delete-dialog" class="confirm-dialog" aria-labelledby="delete-dialog-title">
+    <h2 id="delete-dialog-title">Remove selected notes?</h2>
+    <p id="delete-dialog-copy"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-secondary" id="delete-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="delete-confirm">Remove</button>
+    </div>
+  </dialog>
 
   <script src="config.js"></script>
   <script src="app.js"></script>

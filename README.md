@@ -31,7 +31,15 @@ GitHub Pages is a static host. Posts are shared across visitors only after you a
 4. Put them in `config.js`, like `config.example.js`.
 5. Commit and push `config.js`.
 
-The anon key is meant to be public, but anyone who finds it can read and add posts through the API. The PIN does not protect the database. Use this only for a small trusted wall, and do not store private or sensitive photos.
+The anon key is meant to be public, but anyone who finds it can read, add, and delete posts through the API. The PIN does not protect the database. Use this only for a small trusted wall, and do not store private or sensitive photos.
+
+## Remove notes
+
+Anyone who opens the wall with the PIN can select notes and remove them. Removal cannot be undone. This is how you free the space used by old notes and photos.
+
+Photos are stored in the `posts` table as image data, not in a separate Supabase Storage bucket.
+
+If you already ran `supabase.sql` once, run it again so the delete policy is added. Until that policy exists, removal only works for notes stored in this browser.
 
 ## PIN
 
